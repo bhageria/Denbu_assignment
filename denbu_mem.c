@@ -8,7 +8,7 @@
 #include "denbu_mem.h"
 
 
-
+#define INTEGRITY 5050
 
 typedef struct __ourList_t{
     int size;
@@ -53,6 +53,7 @@ int Denbu_Mem_Init(int sizeOfRegion)
         exit(1);
     }
     head = memmptr;
+    printf("Head = %p\n",head);
     head->size = sizeOfRegion;
     head->next = NULL;
     
@@ -74,6 +75,7 @@ int Denbu_Mem_Init(int sizeOfRegion)
 
 typedef struct __header_t{
     int size;
+    int integrity;
 }header_t; //header structure for each block of allocated memory
 
 
@@ -89,9 +91,11 @@ void *Denbu_Mem_Alloc(int size, int style)
     int newSize =0;
     void *memPointer = NULL;
     ourList_t *tmp = head;
+    printf("Inside Alloc - tmp = %p\n",tmp);
 
     while(tmp)
     {
+        
         if (tmp->size >= size + sizeof(header_t))
         {
             memPointer = tmp;
@@ -104,23 +108,71 @@ void *Denbu_Mem_Alloc(int size, int style)
     if(memPointer != NULL)
     {
         tmp = (void *) memPointer;
+        //printf("tmp = (void *) memPointer; = %p\n",tmp);
+        
         ourList_t *tmpNext = tmp->next; //place holder for next
+        //printf("Inside Alloc - tmp->next = %p\n",tmpNext);
+        
+        //printf("size = %d\n",size);
+        //printf("sizeof(header_t)= %d\n",sizeof(header_t));
+        //printf("tmp->size = %d\n",tmp->size );
         newSize = tmp->size - size - sizeof(header_t);
+        //printf("newSize = tmp->size - size - sizeof(header_t); = %d\n",newSize);
+        
         memPointer = memPointer + tmp->size - size;
+        //printf("memPointer = memPointer + tmp->size - size; = %p\n",memPointer);
+        
         hPointer = (void *)memPointer - sizeof(header_t);
+        //printf("hPointer = (void *)memPointer - sizeof(header_t); = %p\n",hPointer);
+        
         hPointer->size = size;
+        //printf("hPointer->size = size; = %d\n",hPointer->size);
+        hPointer->integrity = INTEGRITY;
         tmp->size = newSize;
+        //printf("tmp->size = newSize; = %d\n",tmp->size);
+        
         tmp->next = tmpNext; //when you update size next changes so set it back
+        //printf("tmp->next = tmpNext; = %p\n\n\n",tmp->next);
     }
     else if (memPointer == NULL)
     {
         m_error = E_NO_SPACE;
         return NULL;
     }
-    printf("returned ptr from alloc: %p\n", memPointer);
+    //printf("returned ptr from alloc: %p\n", memPointer);
     return (void *)memPointer;
 }
 
+
+int Denbu_Mem_Free(void *ptr)
+{
+    printf("inside Denbu_Mem_Free()\n");
+    
+    // CHECK FOR NULL POINTER
+    if (ptr == NULL) {
+        m_error = E_BAD_POINTER;
+        return -1;
+    }
+    
+    header_t *hptr = (void *) ptr - sizeof(header_t);
+    
+    if (hptr->integrity != INTEGRITY) {
+        m_error = E_BAD_POINTER;
+        return -1;
+    }
+    
+    // FIND SIZE OF FREE REGION
+    int freeSize = (hptr->size) + sizeof(header_t);
+    printf("Freed Region Size: %d\n", freeSize);
+    
+    
+    // ADD FREED NODE TO FREE LIST
+    ourList_t *tmp = head; // keep ref to head
+    head = (void *)hptr; // make head point to new freed chunk
+    head->next = tmp; // make new head point to old head
+    head->size = freeSize;
+    
+}
 
 void Denbu_Mem_Dump()
 {
